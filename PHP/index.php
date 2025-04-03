@@ -2,7 +2,6 @@
 require_once 'db_connect.php';
 require_once 'fetch_data.php';
 
-// Default student (for demo)
 $student = getStudent('921231410');
 ?>
 
@@ -13,7 +12,7 @@ $student = getStudent('921231410');
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Grade 12 Online National Exam</title>
     <style>
-        /* Same CSS as before, unchanged */
+        /* Previous styles remain mostly unchanged, adding toggle-specific styles */
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
         body { background-color: #f5f7fa; color: #2d3748; line-height: 1.6; }
         .container { display: flex; min-height: 100vh; }
@@ -66,8 +65,22 @@ $student = getStudent('921231410');
         .modal-content ul li { font-size: 14px; color: #4a5568; margin: 8px 0; }
         .modal-content .start-btn { background: #1a73e8; color: #ffffff; padding: 12px 24px; border: none; border-radius: 6px; font-size: 16px; font-weight: 500; cursor: pointer; width: 100%; transition: background-color 0.2s ease; }
         .modal-content .start-btn:hover { background: #1557b0; }
+        .results { display: none; padding: 20px; background: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); }
+        .results h2 { font-size: 20px; margin-bottom: 16px; }
+        .results p { font-size: 16px; margin: 8px 0; }
+        .results .correct { color: #2ecc71; }
+        .results .incorrect { color: #e74c3c; }
+        /* Toggle Switch Styles */
+        .toggle-container { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+        .toggle-label { font-size: 15px; font-weight: 500; color: #2d3748; }
+        .toggle-switch { position: relative; display: inline-block; width: 60px; height: 34px; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
+        .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: #1a73e8; }
+        input:checked + .slider:before { transform: translateX(26px); }
         @media (max-width: 1024px) { .sidebar { width: 200px; } .main-content { margin-left: 200px; } .exam-overview { width: 180px; } .exam-overview .grid { grid-template-columns: repeat(5, 1fr); } }
-        @media (max-width: 768px) { .container { flex-direction: column; } .sidebar { width: 100%; height: auto; position: relative; padding:16px; } .main-content { margin-left: 0; padding: 16px; } .exam-section { flex-direction: column; } .exam-overview { width: 100%; margin-top: 16px; } .exam-overview .grid { grid-template-columns: repeat(5, 1fr); } .header .basic-info { flex-direction: column; gap: 12px; } .timer { position: static; margin-top: 12px; } }
+        @media (max-width: 768px) { .container { flex-direction: column; } .sidebar { width: 100%; height: auto; position: relative; padding: 16px; } .main-content { margin-left: 0; padding: 16px; } .exam-section { flex-direction: column; } .exam-overview { width: 100%; margin-top: 16px; } .exam-overview .grid { grid-template-columns: repeat(5, 1fr); } .header .basic-info { flex-direction: column; gap: 12px; } .timer { position: static; margin-top: 12px; } }
         @media (max-width: 480px) { .exam-overview .grid { grid-template-columns: repeat(5, 1fr); } .navigation { flex-direction: column; gap: 12px; } .navigation button { width: 100%; } }
     </style>
 </head>
@@ -81,10 +94,14 @@ $student = getStudent('921231410');
                 National Exam
             </div>
             <div class="dropdowns">
-                <select id="mode-select">
-                    <option value="Exam">Exam Mode</option>
-                    <option value="Practice">Practice Mode</option>
-                </select>
+                <div class="toggle-container">
+                    <span class="toggle-label">Practice</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="mode-toggle">
+                        <span class="slider"></span>
+                    </label>
+                    <span class="toggle-label">Exam</span>
+                </div>
                 <select id="subject-select">
                     <?php foreach (getSubjects() as $subject): ?>
                         <option value="<?php echo $subject['id']; ?>"><?php echo htmlspecialchars($subject['name']); ?></option>
@@ -119,6 +136,7 @@ $student = getStudent('921231410');
                         <button class="prev" id="prev-btn">Prev</button>
                         <button class="next" id="next-btn">Next</button>
                     </div>
+                    <div class="results" id="results-container"></div>
                 </div>
 
                 <div class="exam-overview">
@@ -154,19 +172,35 @@ $student = getStudent('921231410');
         const prevButton = document.getElementById('prev-btn');
         const nextButton = document.getElementById('next-btn');
         const gridItemsContainer = document.getElementById('exam-grid');
-        const modeSelect = document.getElementById('mode-select');
+        const modeToggle = document.getElementById('mode-toggle');
         const timer = document.getElementById('timer');
         const subjectSelect = document.getElementById('subject-select');
         const yearSelect = document.getElementById('year-select');
         const examTitle = document.getElementById('exam-title');
         const examModal = document.getElementById('exam-modal');
         const startExamBtn = document.getElementById('start-exam-btn');
+        const resultsContainer = document.getElementById('results-container');
+
+        function resetExam() {
+            currentQuestionIndex = 0;
+            questions = [];
+            skippedQuestions.clear();
+            selectedAnswers.length = 0;
+            resultsContainer.style.display = 'none';
+            fetchYears(subjectSelect.value);
+        }
 
         function renderQuestion() {
             if (!questions.length) return;
+            if (modeToggle.checked && currentQuestionIndex >= questions.length) {
+                showResults();
+                return;
+            }
+
             const question = questions[currentQuestionIndex];
             const isSkipped = skippedQuestions.has(question.id);
             const selectedAnswer = selectedAnswers[currentQuestionIndex];
+            const isExamMode = modeToggle.checked;
 
             questionContainer.innerHTML = `
                 <p><strong>Question ${question.id}</strong></p>
@@ -178,14 +212,15 @@ $student = getStudent('921231410');
                         </button>
                     `).join('')}
                 </div>
-                <button class="skip-btn ${isSkipped ? 'skipped' : ''}">Skip Question</button>
-                ${modeSelect.value === 'Practice' ? `
+                ${isExamMode ? `
+                    <button class="skip-btn ${isSkipped ? 'skipped' : ''}">Skip Question</button>
+                ` : `
                     <button class="show-answer-btn">Show Answer with Explanation</button>
                     <div class="answer-explanation">
                         <p><strong>Correct Answer:</strong> ${question.options.find(opt => opt.value === question.correctAnswer).text}</p>
                         <p><strong>Explanation:</strong> ${question.explanation}</p>
                     </div>
-                ` : ''}
+                `}
             `;
 
             const gridItems = gridItemsContainer.querySelectorAll('div');
@@ -205,28 +240,60 @@ $student = getStudent('921231410');
                 });
             });
 
-            const skipButton = questionContainer.querySelector('.skip-btn');
-            skipButton.addEventListener('click', () => {
-                skipButton.classList.toggle('skipped');
-                if (skipButton.classList.contains('skipped')) {
-                    skippedQuestions.add(question.id);
-                    gridItems[currentQuestionIndex].classList.add('skipped');
-                } else {
-                    skippedQuestions.delete(question.id);
-                    gridItems[currentQuestionIndex].classList.remove('skipped');
+            if (isExamMode) {
+                const skipButton = questionContainer.querySelector('.skip-btn');
+                if (skipButton) {
+                    skipButton.addEventListener('click', () => {
+                        skipButton.classList.add('skipped');
+                        skippedQuestions.add(question.id);
+                        gridItems[currentQuestionIndex].classList.add('skipped');
+                        if (currentQuestionIndex < questions.length - 1) {
+                            currentQuestionIndex++;
+                            renderQuestion();
+                        } else {
+                            showResults();
+                        }
+                    });
                 }
-            });
-
-            if (modeSelect.value === 'Practice') {
+            } else {
                 const showAnswerButton = questionContainer.querySelector('.show-answer-btn');
                 const answerExplanation = questionContainer.querySelector('.answer-explanation');
-                showAnswerButton.addEventListener('click', () => {
-                    answerExplanation.classList.toggle('show');
-                });
+                if (showAnswerButton) {
+                    showAnswerButton.addEventListener('click', () => {
+                        answerExplanation.classList.toggle('show');
+                    });
+                }
             }
 
             prevButton.disabled = currentQuestionIndex === 0;
             nextButton.disabled = currentQuestionIndex === questions.length - 1;
+        }
+
+        function showResults() {
+            if (!modeToggle.checked) return; // Only show results in Exam mode
+
+            let correct = 0;
+            let total = questions.length;
+            let resultsHTML = '<h2>Exam Results</h2>';
+
+            questions.forEach((question, index) => {
+                const userAnswer = selectedAnswers[index];
+                const isCorrect = userAnswer === question.correctAnswer;
+                if (isCorrect) correct++;
+                resultsHTML += `
+                    <p>Question ${question.id}: ${question.text}</p>
+                    <p>Your Answer: ${userAnswer ? question.options.find(opt => opt.value === userAnswer).text : 'Skipped'}</p>
+                    <p class="${isCorrect ? 'correct' : 'incorrect'}">Correct Answer: ${question.options.find(opt => opt.value === question.correctAnswer).text}</p>
+                    <p>Explanation: ${question.explanation}</p><br>
+                `;
+            });
+
+            resultsHTML += `<p><strong>Score: ${correct} / ${total} (${((correct / total) * 100).toFixed(2)}%)</strong></p>`;
+            resultsContainer.innerHTML = resultsHTML;
+            resultsContainer.style.display = 'block';
+            questionContainer.style.display = 'none';
+            prevButton.style.display = 'none';
+            nextButton.style.display = 'none';
         }
 
         function updateExamGrid() {
@@ -264,6 +331,10 @@ $student = getStudent('921231410');
                     currentQuestionIndex = 0;
                     updateExamGrid();
                     renderQuestion();
+                    questionContainer.style.display = 'block';
+                    prevButton.style.display = 'block';
+                    nextButton.style.display = 'block';
+                    resultsContainer.style.display = 'none';
                 });
         }
 
@@ -284,18 +355,20 @@ $student = getStudent('921231410');
             if (currentQuestionIndex < questions.length - 1) {
                 currentQuestionIndex++;
                 renderQuestion();
+            } else if (modeToggle.checked) {
+                showResults();
             }
         });
 
-        modeSelect.addEventListener('change', () => {
-            if (modeSelect.value === 'Exam') {
+        modeToggle.addEventListener('change', () => {
+            resetExam();
+            if (modeToggle.checked) {
                 examModal.style.display = 'flex';
                 timer.style.display = 'block';
             } else {
                 examModal.style.display = 'none';
                 timer.style.display = 'none';
             }
-            renderQuestion();
         });
 
         startExamBtn.addEventListener('click', () => {
@@ -312,7 +385,8 @@ $student = getStudent('921231410');
             fetchQuestions(yearSelect.value);
         });
 
-        // Initial load
+        // Initial load (Practice mode by default)
+        timer.style.display = 'none';
         fetchYears(subjectSelect.value);
     </script>
 </body>
