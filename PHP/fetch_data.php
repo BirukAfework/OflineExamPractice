@@ -50,10 +50,17 @@ function getQuestions($exam_year_id) {
             ];
         }
     }
-    return array_values($questions);
+    
+    $stmt = $pdo->prepare("SELECT duration_minutes FROM exam_years WHERE id = ?");
+    $stmt->execute([$exam_year_id]);
+    $duration = $stmt->fetchColumn();
+    
+    return [
+        'questions' => array_values($questions),
+        'duration' => $duration !== false ? (int)$duration : 120
+    ];
 }
 
-// Example usage (for AJAX calls)
 if (isset($_GET['action'])) {
     header('Content-Type: application/json');
     switch ($_GET['action']) {
@@ -65,6 +72,9 @@ if (isset($_GET['action'])) {
             break;
         case 'get_questions':
             echo json_encode(getQuestions($_GET['exam_year_id']));
+            break;
+        default:
+            echo json_encode(['error' => 'Invalid action']);
             break;
     }
     exit;
