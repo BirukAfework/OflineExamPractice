@@ -3,6 +3,76 @@ ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
+// Start session to manage authentication
+session_start();
+
+// Define valid credentials
+define('VALID_USERNAME', 'School');
+define('VALID_PASSWORD', 'teacher');
+
+// Check if user is authenticated
+if (!isset($_SESSION['authenticated']) || $_SESSION['authenticated'] !== true) {
+    // Handle login form submission
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
+        $username = $_POST['username'] ?? '';
+        $password = $_POST['password'] ?? '';
+
+        if ($username === VALID_USERNAME && $password === VALID_PASSWORD) {
+            $_SESSION['authenticated'] = true;
+        } else {
+            // Redirect to home page if credentials are incorrect
+            header('Location: index.php');
+            exit;
+        }
+    } else {
+        // Display login form if not authenticated
+        ?>
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Login - National Exam System</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
+                body { background-color: #f5f7fa; color: #2d3748; display: flex; justify-content: center; align-items: center; height: 100vh; }
+                .login-container { background: #ffffff; padding: 32px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); width: 100%; max-width: 400px; }
+                h1 { font-size: 24px; font-weight: 600; color: #1a73e8; margin-bottom: 24px; text-align: center; }
+                .form-group { margin-bottom: 16px; }
+                label { display: block; font-size: 15px; font-weight: 500; color: #2d3748; margin-bottom: 8px; }
+                input[type="text"], input[type="password"] { width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; }
+                input:focus { outline: none; border-color: #1a73e8; background: #f1f5f9; }
+                button { width: 100%; padding: 10px; background: #1a73e8; color: #ffffff; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background 0.2s ease; }
+                button:hover { background: #1557b0; }
+                .error { color: #721c24; background: #f8d7da; padding: 12px; border-radius: 6px; margin-bottom: 16px; text-align: center; }
+            </style>
+        </head>
+        <body>
+            <div class="login-container">
+                <h1>Admin Login</h1>
+                <?php if (isset($_POST['login'])): ?>
+                    <div class="error">Invalid username or password</div>
+                <?php endif; ?>
+                <form method="POST">
+                    <div class="form-group">
+                        <label for="username">Username</label>
+                        <input type="text" name="username" id="username" required placeholder="Enter username">
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" name="password" id="password" required placeholder="Enter password">
+                    </div>
+                    <button type="submit" name="login">Login</button>
+                </form>
+            </div>
+        </body>
+        </html>
+        <?php
+        exit;
+    }
+}
+
+// If authenticated, proceed with the original code
 require_once 'db_connect.php';
 
 // Fetch subjects for the dropdown
