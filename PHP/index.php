@@ -12,7 +12,6 @@ $student = getStudent('921231410');
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Grade 12 Online National Exam</title>
     <style>
-        /* Previous styles remain mostly unchanged, adding toggle-specific styles */
         * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
         body { background-color: #f5f7fa; color: #2d3748; line-height: 1.6; }
         .container { display: flex; min-height: 100vh; }
@@ -49,8 +48,8 @@ $student = getStudent('921231410');
         .question .answer-explanation p strong { color: #1a73e8; }
         .navigation { display: flex; justify-content: space-between; margin-top: 24px; }
         .navigation button { padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background-color 0.2s ease, transform 0.1s ease; }
-        .navigation .prev, .navigation .next { background: #edf2f7; color: #4a5568; }
-        .navigation .prev:hover, .navigation .next:hover { background: #e2e8f0; transform: translateY(-1px); }
+        .navigation .prev, .navigation .next, .navigation .show-results { background: #edf2f7; color: #4a5568; }
+        .navigation .prev:hover, .navigation .next:hover, .navigation .show-results:hover { background: #e2e8f0; transform: translateY(-1px); }
         .exam-overview { width: 220px; background: #ffffff; padding: 24px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); }
         .exam-overview h3 { font-size: 16px; font-weight: 600; color: #2d3748; margin-bottom: 16px; }
         .exam-overview .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
@@ -59,18 +58,15 @@ $student = getStudent('921231410');
         .exam-overview .grid div.current { background: #1a73e8; color: #ffffff; }
         .exam-overview .grid div.skipped { background: #e53e3e; color: #ffffff; }
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 1000; justify-content: center; align-items: center; }
-        .modal-content { background: #ffffff; padding: 32px; border-radius: 8px; width: 90%; max-width: 500px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+        .modal-content { background: #ffffff; padding: 32px; border-radius: 8px; width: 90%; max-width: 600px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); max-height: 80vh; overflow-y: auto; }
         .modal-content h2 { font-size: 24px; font-weight: 600; color: #2d3748; margin-bottom: 16px; }
         .modal-content ul { list-style-type: disc; padding-left: 20px; margin-bottom: 24px; }
         .modal-content ul li { font-size: 14px; color: #4a5568; margin: 8px 0; }
-        .modal-content .start-btn { background: #1a73e8; color: #ffffff; padding: 12px 24px; border: none; border-radius: 6px; font-size: 16px; font-weight: 500; cursor: pointer; width: 100%; transition: background-color 0.2s ease; }
-        .modal-content .start-btn:hover { background: #1557b0; }
-        .results { display: none; padding: 20px; background: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); }
-        .results h2 { font-size: 20px; margin-bottom: 16px; }
-        .results p { font-size: 16px; margin: 8px 0; }
-        .results .correct { color: #2ecc71; }
-        .results .incorrect { color: #e74c3c; }
-        /* Toggle Switch Styles */
+        .modal-content .start-btn, .modal-content .close-btn { background: #1a73e8; color: #ffffff; padding: 12px 24px; border: none; border-radius: 6px; font-size: 16px; font-weight: 500; cursor: pointer; width: 100%; transition: background-color 0.2s ease; margin-top: 10px; }
+        .modal-content .start-btn:hover, .modal-content .close-btn:hover { background: #1557b0; }
+        .results-content p { font-size: 16px; margin: 8px 0; }
+        .results-content .correct { color: #2ecc71; }
+        .results-content .incorrect { color: #e74c3c; }
         .toggle-container { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
         .toggle-label { font-size: 15px; font-weight: 500; color: #2d3748; }
         .toggle-switch { position: relative; display: inline-block; width: 60px; height: 34px; }
@@ -136,7 +132,6 @@ $student = getStudent('921231410');
                         <button class="prev" id="prev-btn">Prev</button>
                         <button class="next" id="next-btn">Next</button>
                     </div>
-                    <div class="results" id="results-container"></div>
                 </div>
 
                 <div class="exam-overview">
@@ -162,6 +157,14 @@ $student = getStudent('921231410');
         </div>
     </div>
 
+    <div class="modal" id="results-modal">
+        <div class="modal-content">
+            <h2>Exam Results</h2>
+            <div class="results-content" id="results-content"></div>
+            <button class="close-btn" id="close-results-btn">Close</button>
+        </div>
+    </div>
+
     <script>
         let currentQuestionIndex = 0;
         let questions = [];
@@ -179,28 +182,27 @@ $student = getStudent('921231410');
         const examTitle = document.getElementById('exam-title');
         const examModal = document.getElementById('exam-modal');
         const startExamBtn = document.getElementById('start-exam-btn');
-        const resultsContainer = document.getElementById('results-container');
+        const resultsModal = document.getElementById('results-modal');
+        const resultsContent = document.getElementById('results-content');
+        const closeResultsBtn = document.getElementById('close-results-btn');
 
         function resetExam() {
             currentQuestionIndex = 0;
             questions = [];
             skippedQuestions.clear();
             selectedAnswers.length = 0;
-            resultsContainer.style.display = 'none';
+            resultsModal.style.display = 'none';
             fetchYears(subjectSelect.value);
         }
 
         function renderQuestion() {
             if (!questions.length) return;
-            if (modeToggle.checked && currentQuestionIndex >= questions.length) {
-                showResults();
-                return;
-            }
 
             const question = questions[currentQuestionIndex];
             const isSkipped = skippedQuestions.has(question.id);
             const selectedAnswer = selectedAnswers[currentQuestionIndex];
             const isExamMode = modeToggle.checked;
+            const isLastQuestion = currentQuestionIndex === questions.length - 1;
 
             questionContainer.innerHTML = `
                 <p><strong>Question ${question.id}</strong></p>
@@ -250,8 +252,6 @@ $student = getStudent('921231410');
                         if (currentQuestionIndex < questions.length - 1) {
                             currentQuestionIndex++;
                             renderQuestion();
-                        } else {
-                            showResults();
                         }
                     });
                 }
@@ -266,7 +266,16 @@ $student = getStudent('921231410');
             }
 
             prevButton.disabled = currentQuestionIndex === 0;
-            nextButton.disabled = currentQuestionIndex === questions.length - 1;
+            if (isExamMode && isLastQuestion) {
+                nextButton.textContent = 'Show Results';
+                nextButton.classList.remove('next');
+                nextButton.classList.add('show-results');
+            } else {
+                nextButton.textContent = 'Next';
+                nextButton.classList.remove('show-results');
+                nextButton.classList.add('next');
+                nextButton.disabled = isLastQuestion && !isExamMode;
+            }
         }
 
         function showResults() {
@@ -274,7 +283,7 @@ $student = getStudent('921231410');
 
             let correct = 0;
             let total = questions.length;
-            let resultsHTML = '<h2>Exam Results</h2>';
+            let resultsHTML = '';
 
             questions.forEach((question, index) => {
                 const userAnswer = selectedAnswers[index];
@@ -289,8 +298,8 @@ $student = getStudent('921231410');
             });
 
             resultsHTML += `<p><strong>Score: ${correct} / ${total} (${((correct / total) * 100).toFixed(2)}%)</strong></p>`;
-            resultsContainer.innerHTML = resultsHTML;
-            resultsContainer.style.display = 'block';
+            resultsContent.innerHTML = resultsHTML;
+            resultsModal.style.display = 'flex';
             questionContainer.style.display = 'none';
             prevButton.style.display = 'none';
             nextButton.style.display = 'none';
@@ -334,7 +343,7 @@ $student = getStudent('921231410');
                     questionContainer.style.display = 'block';
                     prevButton.style.display = 'block';
                     nextButton.style.display = 'block';
-                    resultsContainer.style.display = 'none';
+                    resultsModal.style.display = 'none';
                 });
         }
 
@@ -352,11 +361,11 @@ $student = getStudent('921231410');
         });
 
         nextButton.addEventListener('click', () => {
-            if (currentQuestionIndex < questions.length - 1) {
+            if (modeToggle.checked && currentQuestionIndex === questions.length - 1) {
+                showResults();
+            } else if (currentQuestionIndex < questions.length - 1) {
                 currentQuestionIndex++;
                 renderQuestion();
-            } else if (modeToggle.checked) {
-                showResults();
             }
         });
 
@@ -374,6 +383,11 @@ $student = getStudent('921231410');
         startExamBtn.addEventListener('click', () => {
             examModal.style.display = 'none';
             renderQuestion();
+        });
+
+        closeResultsBtn.addEventListener('click', () => {
+            resultsModal.style.display = 'none';
+            resetExam();
         });
 
         subjectSelect.addEventListener('change', () => {
