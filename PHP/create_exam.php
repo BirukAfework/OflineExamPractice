@@ -14,8 +14,8 @@ function getSubjects() {
 
 $subjects = getSubjects();
 
-// Handle form submission
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// Handle form submission (manual entry)
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['submit_exam'])) {
     try {
         $pdo->beginTransaction();
 
@@ -28,14 +28,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([$year, $subject_id, $duration_minutes]);
         $exam_year_id = $pdo->lastInsertId();
 
-        // Insert questions and options
+        // Handle questions
         foreach ($_POST['questions'] as $index => $question_data) {
             $question_text = $question_data['text'];
             $correct_answer = $question_data['correct_answer'];
             $explanation = $question_data['explanation'];
 
-            $stmt = $pdo->prepare("INSERT INTO questions (exam_year_id, question_text, correct_answer, explanation) VALUES (?, ?, ?, ?)");
-            $stmt->execute([$exam_year_id, $question_text, $correct_answer, $explanation]);
+            // Handle image upload (optional)
+            $image_path = null;
+            if (isset($_FILES['questions']['name'][$index]['image']) && $_FILES['questions']['error'][$index]['image'] === UPLOAD_ERR_OK) {
+                $upload_dir = 'uploads/';
+                if (!is_dir($upload_dir)) mkdir($upload_dir, 0777, true);
+                $image_name = uniqid() . '_' . basename($_FILES['questions']['name'][$index]['image']);
+                $image_path = $upload_dir . $image_name;
+                move_uploaded_file($_FILES['questions']['tmp_name'][$index]['image'], $image_path);
+            }
+
+            $stmt = $pdo->prepare("INSERT INTO questions (exam_year_id, question_text, correct_answer, explanation, image_path) VALUES (?, ?, ?, ?, ?)");
+            $stmt->execute([$exam_year_id, $question_text, $correct_answer, $explanation, $image_path]);
             $question_id = $pdo->lastInsertId();
 
             foreach ($question_data['options'] as $option) {
@@ -54,6 +64,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error_message = "Error creating exam: " . $e->getMessage();
     }
 }
+
+// Handle SQL file upload
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['sql_file'])) {
+    try {
+        $sql_file = $_FILES['sql_file']['tmp_name'];
+        if ($_FILES['sql_file']['error'] === UPLOAD_ERR_OK && is_uploaded_file($sql_file)) {
+            $sql_content = file_get_contents($sql_file);
+            $pdo->exec($sql_content);
+            $success_message = "Questions imported successfully from SQL file!";
+        } else {
+            $error_message = "Error uploading SQL file.";
+        }
+    } catch (Exception $e) {
+        $error_message = "Error importing SQL: " . $e->getMessage();
+    }
+}
+
+// Update schema to include image_path if not already present
+$pdo->exec("ALTER TABLE questions ADD COLUMN IF NOT EXISTS image_path VARCHAR(255) NULL");
 ?>
 
 <!DOCTYPE html>
@@ -69,21 +98,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         h1 { font-size: 24px; font-weight: 600; color: #1a73e8; margin-bottom: 24px; }
         .form-group { margin-bottom: 16px; }
         label { display: block; font-size: 15px; font-weight: 500; color: #2d3748; margin-bottom: 8px; }
-        select, input[type="number"], textarea { width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; color: #2d3748; background: #ffffff; }
+        select, input[type="number"], input[type="file"], textarea { width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 14px; color: #2d3748; background: #ffffff; }
         select:focus, input:focus, textarea:focus { outline: none; border-color: #1a73e8; background: #f1f5f9; }
         textarea { resize: vertical; min-height: 80px; }
         .question-block { border: 1px solid #e2e8f0; padding: 16px; border-radius: 6px; background: #fafafa; margin-bottom: 16px; }
         .option-group { margin-top: 12px; display: flex; gap: 8px; align-items: center; }
         .option-group input[type="text"] { flex: 1; }
-        .option-group input[type="radio"] { margin-right: 8px; }
         button { padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background-color 0.2s ease; }
-        #add-question { background: #1a73e8; color: #ffffff; margin-top: 16px; }
-        #add-question:hover { background: #1557b0; }
+        #generate-questions { background: #1a73e8; color: #ffffff; margin-top: 16px; }
+        #generate-questions:hover { background: #1557b0; }
         #submit-exam { background: #2ecc71; color: #ffffff; margin-top: 24px; }
         #submit-exam:hover { background: #27ae60; }
+        #submit-sql { background: #f39c12; color: #ffffff; margin-top: 16px; }
+        #submit-sql:hover { background: #e67e22; }
         .message { padding: 12px; border-radius: 6px; margin-bottom: 16px; }
         .success { background: #d4edda; color: #155724; }
         .error { background: #f8d7da; color: #721c24; }
+        .sql-upload { margin-top: 24px; border-top: 1px solid #e2e8f0; padding-top: 16px; }
     </style>
 </head>
 <body>
@@ -96,7 +127,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="message error"><?php echo htmlspecialchars($error_message); ?></div>
         <?php endif; ?>
 
-        <form method="POST" id="exam-form">
+        <form method="POST" enctype="multipart/form-data" id="exam-form">
             <div class="form-group">
                 <label for="subject_id">Subject</label>
                 <select name="subject_id" id="subject_id" required>
@@ -117,64 +148,93 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <input type="number" name="duration_minutes" id="duration_minutes" min="1" required placeholder="e.g., 120">
             </div>
 
-            <div id="questions-container">
-                <!-- Questions will be added here dynamically -->
+            <div class="form-group">
+                <label for="num_questions">Number of Questions</label>
+                <input type="number" id="num_questions" min="1" required placeholder="e.g., 5">
+                <button type="button" id="generate-questions">Generate Questions</button>
             </div>
 
-            <button type="button" id="add-question">Add Question</button>
-            <button type="submit" id="submit-exam">Create Exam</button>
+            <div id="questions-container"></div>
+
+            <button type="submit" name="submit_exam" id="submit-exam">Create Exam</button>
         </form>
+
+        <div class="sql-upload">
+            <h2>Import Questions from SQL File</h2>
+            <form method="POST" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="sql_file">Upload SQL File</label>
+                    <input type="file" name="sql_file" id="sql_file" accept=".sql" required>
+                </div>
+                <button type="submit" id="submit-sql">Import SQL</button>
+            </form>
+        </div>
     </div>
 
     <script>
         const questionsContainer = document.getElementById('questions-container');
-        let questionCount = 0;
 
-        function addQuestion() {
-            questionCount++;
+        function addQuestion(index) {
             const questionBlock = document.createElement('div');
             questionBlock.className = 'question-block';
             questionBlock.innerHTML = `
-                <h3>Question ${questionCount}</h3>
+                <h3>Question ${index + 1}</h3>
                 <div class="form-group">
                     <label>Question Text</label>
-                    <textarea name="questions[${questionCount - 1}][text]" required placeholder="Enter question text"></textarea>
+                    <textarea name="questions[${index}][text]" required placeholder="Enter question text"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Image (Optional)</label>
+                    <input type="file" name="questions[${index}][image]" accept="image/*">
                 </div>
                 <div class="form-group">
                     <label>Options</label>
                     <div class="option-group">
-                        <input type="radio" name="questions[${questionCount - 1}][correct_answer]" value="a" required>
-                        <input type="text" name="questions[${questionCount - 1}][options][0][value]" value="a" readonly style="width: 40px;">
-                        <input type="text" name="questions[${questionCount - 1}][options][0][text]" required placeholder="Option A">
+                        <input type="text" name="questions[${index}][options][0][value]" value="a" readonly style="width: 40px;">
+                        <input type="text" name="questions[${index}][options][0][text]" required placeholder="Option A">
                     </div>
                     <div class="option-group">
-                        <input type="radio" name="questions[${questionCount - 1}][correct_answer]" value="b">
-                        <input type="text" name="questions[${questionCount - 1}][options][1][value]" value="b" readonly style="width: 40px;">
-                        <input type="text" name="questions[${questionCount - 1}][options][1][text]" required placeholder="Option B">
+                        <input type="text" name="questions[${index}][options][1][value]" value="b" readonly style="width: 40px;">
+                        <input type="text" name="questions[${index}][options][1][text]" required placeholder="Option B">
                     </div>
                     <div class="option-group">
-                        <input type="radio" name="questions[${questionCount - 1}][correct_answer]" value="c">
-                        <input type="text" name="questions[${questionCount - 1}][options][2][value]" value="c" readonly style="width: 40px;">
-                        <input type="text" name="questions[${questionCount - 1}][options][2][text]" required placeholder="Option C">
+                        <input type="text" name="questions[${index}][options][2][value]" value="c" readonly style="width: 40px;">
+                        <input type="text" name="questions[${index}][options][2][text]" required placeholder="Option C">
                     </div>
                     <div class="option-group">
-                        <input type="radio" name="questions[${questionCount - 1}][correct_answer]" value="d">
-                        <input type="text" name="questions[${questionCount - 1}][options][3][value]" value="d" readonly style="width: 40px;">
-                        <input type="text" name="questions[${questionCount - 1}][options][3][text]" required placeholder="Option D">
+                        <input type="text" name="questions[${index}][options][3][value]" value="d" readonly style="width: 40px;">
+                        <input type="text" name="questions[${index}][options][3][text]" required placeholder="Option D">
                     </div>
                 </div>
                 <div class="form-group">
+                    <label>Correct Answer</label>
+                    <select name="questions[${index}][correct_answer]" required>
+                        <option value="">Select correct answer</option>
+                        <option value="a">A</option>
+                        <option value="b">B</option>
+                        <option value="c">C</option>
+                        <option value="d">D</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label>Explanation</label>
-                    <textarea name="questions[${questionCount - 1}][explanation]" placeholder="Enter explanation (optional)"></textarea>
+                    <textarea name="questions[${index}][explanation]" placeholder="Enter explanation (optional)"></textarea>
                 </div>
             `;
             questionsContainer.appendChild(questionBlock);
         }
 
-        document.getElementById('add-question').addEventListener('click', addQuestion);
-
-        // Add one question by default
-        addQuestion();
+        document.getElementById('generate-questions').addEventListener('click', () => {
+            const numQuestions = parseInt(document.getElementById('num_questions').value);
+            if (isNaN(numQuestions) || numQuestions < 1) {
+                alert("Please enter a valid number of questions.");
+                return;
+            }
+            questionsContainer.innerHTML = ''; // Clear existing questions
+            for (let i = 0; i < numQuestions; i++) {
+                addQuestion(i);
+            }
+        });
     </script>
 </body>
 </html>
