@@ -1,8 +1,15 @@
 <?php
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
 require_once 'db_connect.php';
 require_once 'fetch_data.php';
 
 $student = getStudent('921231410');
+if (!$student) {
+    die("Error: Student not found for admission number '921231410'");
+}
 ?>
 
 <!DOCTYPE html>
@@ -26,7 +33,8 @@ $student = getStudent('921231410');
         .header .basic-info div { flex: 1; }
         .header .basic-info div p { margin: 4px 0; font-size: 14px; color: #4a5568; }
         .header .basic-info div p strong { color: #2d3748; font-weight: 600; }
-        .timer { background: #1a73e8; color: #ffffff; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; }
+        .timer { background: #1a73e8; color: #ffffff; padding: 8px 16px; border-radius: 6px; font-size: 14px; font-weight: 500; transition: background-color 0.2s ease; }
+        .timer.warning { background: #e53e3e; }
         .exam-section { display: flex; gap: 24px; }
         .question-area { flex: 1; background: #ffffff; padding: 24px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); }
         .question-area h2 { font-size: 18px; font-weight: 600; color: #2d3748; margin-bottom: 16px; }
@@ -44,8 +52,6 @@ $student = getStudent('921231410');
         .question .show-answer-btn:hover { background: #f1f5f9; color: #1a73e8; }
         .question .answer-explanation { margin-top: 16px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 6px; background: #ffffff; display: none; }
         .question .answer-explanation.show { display: block; }
-        .question .answer-explanation p { font-size: 14px; color: #2d3748; }
-        .question .answer-explanation p strong { color: #1a73e8; }
         .navigation { display: flex; justify-content: space-between; margin-top: 24px; }
         .navigation button { padding: 10px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; transition: background-color 0.2s ease, transform 0.1s ease; }
         .navigation .prev, .navigation .next, .navigation .show-results { background: #edf2f7; color: #4a5568; }
@@ -58,15 +64,21 @@ $student = getStudent('921231410');
         .exam-overview .grid div.current { background: #1a73e8; color: #ffffff; }
         .exam-overview .grid div.skipped { background: #e53e3e; color: #ffffff; }
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 1000; justify-content: center; align-items: center; }
+        .modal#results-modal { background: rgba(0, 0, 0, 0.7); animation: fadeIn 0.3s ease-in-out; }
         .modal-content { background: #ffffff; padding: 32px; border-radius: 8px; width: 90%; max-width: 600px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); max-height: 80vh; overflow-y: auto; }
+        .modal-content.results-modal-content { background: linear-gradient(135deg, #ffffff, #e3f2fd); padding: 40px; border-radius: 12px; max-width: 700px; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2); transform: scale(0.9); animation: popUp 0.4s ease-out forwards; }
         .modal-content h2 { font-size: 24px; font-weight: 600; color: #2d3748; margin-bottom: 16px; }
+        .modal-content.results-modal-content h2 { font-size: 28px; color: #1a73e8; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
         .modal-content ul { list-style-type: disc; padding-left: 20px; margin-bottom: 24px; }
         .modal-content ul li { font-size: 14px; color: #4a5568; margin: 8px 0; }
-        .modal-content .start-btn, .modal-content .close-btn { background: #1a73e8; color: #ffffff; padding: 12px 24px; border: none; border-radius: 6px; font-size: 16px; font-weight: 500; cursor: pointer; width: 100%; transition: background-color 0.2s ease; margin-top: 10px; }
-        .modal-content .start-btn:hover, .modal-content .close-btn:hover { background: #1557b0; }
-        .results-content p { font-size: 16px; margin: 8px 0; }
-        .results-content .correct { color: #2ecc71; }
-        .results-content .incorrect { color: #e74c3c; }
+        .modal-content .start-btn { background: #1a73e8; color: #ffffff; padding: 12px 24px; border: none; border-radius: 6px; font-size: 16px; font-weight: 500; cursor: pointer; width: 100%; transition: background-color 0.2s ease; margin-top: 10px; }
+        .modal-content .start-btn:hover { background: #1557b0; }
+        .modal-content .close-btn { background: #e53e3e; color: #ffffff; padding: 12px 24px; border: none; border-radius: 6px; font-size: 16px; font-weight: 500; cursor: pointer; width: 100%; transition: background-color 0.2s ease, transform 0.1s ease; margin-top: 20px; }
+        .modal-content .close-btn:hover { background: #c53030; transform: translateY(-2px); }
+        .results-content p { font-size: 16px; margin: 10px 0; padding: 8px; border-radius: 4px; }
+        .results-content .correct { color: #2ecc71; background: rgba(46, 204, 113, 0.1); }
+        .results-content .incorrect { color: #e74c3c; background: rgba(231, 76, 60, 0.1); }
+        .results-content .score { font-size: 24px; font-weight: 600; color: #2d3748; text-align: center; margin-top: 20px; padding: 10px; background: #f1f5f9; border-radius: 8px; }
         .toggle-container { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
         .toggle-label { font-size: 15px; font-weight: 500; color: #2d3748; }
         .toggle-switch { position: relative; display: inline-block; width: 60px; height: 34px; }
@@ -75,8 +87,10 @@ $student = getStudent('921231410');
         .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
         input:checked + .slider { background-color: #1a73e8; }
         input:checked + .slider:before { transform: translateX(26px); }
-        @media (max-width: 1024px) { .sidebar { width: 200px; } .main-content { margin-left: 200px; } .exam-overview { width: 180px; } .exam-overview .grid { grid-template-columns: repeat(5, 1fr); } }
-        @media (max-width: 768px) { .container { flex-direction: column; } .sidebar { width: 100%; height: auto; position: relative; padding: 16px; } .main-content { margin-left: 0; padding: 16px; } .exam-section { flex-direction: column; } .exam-overview { width: 100%; margin-top: 16px; } .exam-overview .grid { grid-template-columns: repeat(5, 1fr); } .header .basic-info { flex-direction: column; gap: 12px; } .timer { position: static; margin-top: 12px; } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes popUp { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @media (max-width: 1024px) { .sidebar { width: 200px; } .main-content { margin-left: 200px; } .exam-overview { width: 180px; } }
+        @media (max-width: 768px) { .container { flex-direction: column; } .sidebar { width: 100%; height: auto; position: relative; padding: 16px; } .main-content { margin-left: 0; padding: 16px; } .exam-section { flex-direction: column; } .exam-overview { width: 100%; margin-top: 16px; } .header .basic-info { flex-direction: column; gap: 12px; } .timer { position: static; margin-top: 12px; } }
         @media (max-width: 480px) { .exam-overview .grid { grid-template-columns: repeat(5, 1fr); } .navigation { flex-direction: column; gap: 12px; } .navigation button { width: 100%; } }
     </style>
 </head>
@@ -121,7 +135,7 @@ $student = getStudent('921231410');
                         <p><strong>ENROLLMENT TYPE:</strong> <?php echo htmlspecialchars($student['enrollment_type']); ?></p>
                     </div>
                 </div>
-                <div class="timer" id="timer">Time left 0:32:00</div>
+                <div class="timer" id="timer">Time left 0:00</div>
             </div>
 
             <div class="exam-section">
@@ -147,7 +161,7 @@ $student = getStudent('921231410');
             <h2>Exam Mode Rules</h2>
             <ul>
                 <li>No external resources or assistance allowed</li>
-                <li>Time limit: 2 hours</li>
+                <li>Time limit: Set by exam duration</li>
                 <li>Questions cannot be revisited once submitted</li>
                 <li>Internet connection must remain stable</li>
                 <li>Answers will be auto-submitted when time expires</li>
@@ -158,8 +172,8 @@ $student = getStudent('921231410');
     </div>
 
     <div class="modal" id="results-modal">
-        <div class="modal-content">
-            <h2>Exam Results</h2>
+        <div class="modal-content results-modal-content">
+            <h2>Your Exam Results</h2>
             <div class="results-content" id="results-content"></div>
             <button class="close-btn" id="close-results-btn">Close</button>
         </div>
@@ -170,6 +184,8 @@ $student = getStudent('921231410');
         let questions = [];
         const skippedQuestions = new Set();
         const selectedAnswers = [];
+        let timeLeft;
+        let timerInterval;
 
         const questionContainer = document.getElementById('question-container');
         const prevButton = document.getElementById('prev-btn');
@@ -186,17 +202,40 @@ $student = getStudent('921231410');
         const resultsContent = document.getElementById('results-content');
         const closeResultsBtn = document.getElementById('close-results-btn');
 
+        function startTimer(durationMinutes) {
+            timeLeft = durationMinutes * 60; // Convert minutes to seconds
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                const minutes = Math.floor(timeLeft / 60);
+                const seconds = timeLeft % 60;
+                timer.textContent = `Time left ${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+                if (timeLeft <= 300) timer.classList.add('warning'); // 5-minute warning
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                    timer.textContent = "Time's up!";
+                    showResults();
+                }
+                timeLeft--;
+            }, 1000);
+        }
+
         function resetExam() {
             currentQuestionIndex = 0;
             questions = [];
             skippedQuestions.clear();
             selectedAnswers.length = 0;
             resultsModal.style.display = 'none';
+            clearInterval(timerInterval);
+            timer.classList.remove('warning');
+            timer.textContent = 'Time left 0:00';
             fetchYears(subjectSelect.value);
         }
 
         function renderQuestion() {
-            if (!questions.length) return;
+            if (!questions.length) {
+                questionContainer.innerHTML = '<p>No questions available.</p>';
+                return;
+            }
 
             const question = questions[currentQuestionIndex];
             const isSkipped = skippedQuestions.has(question.id);
@@ -227,10 +266,7 @@ $student = getStudent('921231410');
 
             const gridItems = gridItemsContainer.querySelectorAll('div');
             gridItems.forEach((item, index) => {
-                item.classList.remove('current');
-                if (index === currentQuestionIndex) {
-                    item.classList.add('current');
-                }
+                item.classList.toggle('current', index === currentQuestionIndex);
             });
 
             const optionButtons = questionContainer.querySelectorAll('.option-btn');
@@ -279,7 +315,7 @@ $student = getStudent('921231410');
         }
 
         function showResults() {
-            if (!modeToggle.checked) return; // Only show results in Exam mode
+            if (!modeToggle.checked) return;
 
             let correct = 0;
             let total = questions.length;
@@ -297,12 +333,13 @@ $student = getStudent('921231410');
                 `;
             });
 
-            resultsHTML += `<p><strong>Score: ${correct} / ${total} (${((correct / total) * 100).toFixed(2)}%)</strong></p>`;
+            resultsHTML += `<p class="score"><strong>Score: ${correct} / ${total} (${((correct / total) * 100).toFixed(2)}%)</strong></p>`;
             resultsContent.innerHTML = resultsHTML;
             resultsModal.style.display = 'flex';
             questionContainer.style.display = 'none';
             prevButton.style.display = 'none';
             nextButton.style.display = 'none';
+            clearInterval(timerInterval);
         }
 
         function updateExamGrid() {
@@ -320,21 +357,35 @@ $student = getStudent('921231410');
 
         function fetchYears(subjectId) {
             fetch(`fetch_data.php?action=get_years&subject_id=${subjectId}`)
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return response.json();
+                })
                 .then(years => {
+                    console.log('Fetched years:', years);
+                    if (!years.length) {
+                        yearSelect.innerHTML = '<option>No years available</option>';
+                        return;
+                    }
                     yearSelect.innerHTML = years.map(year => 
                         `<option value="${year.id}">${year.year}</option>`
                     ).join('');
                     updateExamTitle();
                     fetchQuestions(yearSelect.value);
-                });
+                })
+                .catch(error => console.error('Error fetching years:', error));
         }
 
         function fetchQuestions(examYearId) {
             fetch(`fetch_data.php?action=get_questions&exam_year_id=${examYearId}`)
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    return response.json();
+                })
                 .then(data => {
-                    questions = data;
+                    console.log('Fetched questions data:', data);
+                    questions = data.questions || [];
+                    const duration = data.duration || 120; // Default to 120 if not found
                     selectedAnswers.length = 0;
                     selectedAnswers.push(...new Array(questions.length).fill(null));
                     currentQuestionIndex = 0;
@@ -344,12 +395,17 @@ $student = getStudent('921231410');
                     prevButton.style.display = 'block';
                     nextButton.style.display = 'block';
                     resultsModal.style.display = 'none';
-                });
+                    if (modeToggle.checked) {
+                        startTimer(duration); // Start timer with DB duration
+                        timer.style.display = 'block';
+                    }
+                })
+                .catch(error => console.error('Error fetching questions:', error));
         }
 
         function updateExamTitle() {
             const subject = subjectSelect.options[subjectSelect.selectedIndex].text;
-            const year = yearSelect.options[yearSelect.selectedIndex].text;
+            const year = yearSelect.options[yearSelect.selectedIndex]?.text || '';
             examTitle.textContent = `${subject}/${year}`;
         }
 
@@ -377,12 +433,13 @@ $student = getStudent('921231410');
             } else {
                 examModal.style.display = 'none';
                 timer.style.display = 'none';
+                clearInterval(timerInterval);
             }
         });
 
         startExamBtn.addEventListener('click', () => {
             examModal.style.display = 'none';
-            renderQuestion();
+            fetchQuestions(yearSelect.value);
         });
 
         closeResultsBtn.addEventListener('click', () => {
@@ -399,7 +456,6 @@ $student = getStudent('921231410');
             fetchQuestions(yearSelect.value);
         });
 
-        // Initial load (Practice mode by default)
         timer.style.display = 'none';
         fetchYears(subjectSelect.value);
     </script>
